@@ -1,0 +1,454 @@
+package com.zhixu.leave.service;
+import com.zhixu.leave.entity.Leave;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.zhixu.common.dto.Response;
+import com.zhixu.common.dto.ResponseDTO;
+import com.zhixu.staff.entity.Staff;
+import com.zhixu.leave.entity.StaffLeave;
+import com.zhixu.leave.enums.AuditStatusEnum;
+import com.zhixu.common.enums.BusinessStatusEnum;
+import com.zhixu.leave.approval.LeaveNotifier;
+import com.zhixu.leave.mapper.StaffLeaveMapper;
+import com.zhixu.staff.mapper.StaffMapper;
+import com.zhixu.util.EnumUtil;
+import com.zhixu.util.EasyExcelUtil;
+import com.zhixu.staff.service.SecurityUtil;
+import com.zhixu.leave.vo.StaffLeaveVO;
+import org.flowable.engine.RuntimeService;
+import org.flowable.engine.TaskService;
+import org.flowable.engine.runtime.ProcessInstance;
+import org.flowable.task.api.Task;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * <p>
+ * 服务类
+ * </p>
+ *
+ * @author qiujie
+ * @since 2022-04-05
+ */
+@Service
+public class StaffLeaveService extends ServiceImpl<StaffLeaveMapper, StaffLeave> {
+
+    private static final Logger log = LoggerFactory.getLogger(StaffLeaveService.class);
+
+    @Autowired
+    private StaffLeaveMapper staffLeaveMapper;
+
+    @Autowired
+    private StaffMapper staffMapper;
+
+    @Autowired
+    private RuntimeService runtimeService;
+
+    @Autowired
+    private TaskService taskService;
+
+    @Autowired
+    private SecurityUtil securityUtil;
+
+    @Autowired
+    private LeaveNotifier leaveNotifier;
+
+    /**
+     * 获取当前登录用户的工号
+     *
+     * @return 工号，如果未登录或用户不存在则返回 null
+     */
+    private String getCurrentStaffCode() {
+        Integer currentStaffId = securityUtil.getCurrentOperatorId();
+        if (currentStaffId == null) {
+            return null;
+        }
+        Staff currentStaff = this.staffMapper.selectById(currentStaffId);
+        return currentStaff != null ? currentStaff.getCode() : null;
+    }
+
+    /**
+     * 验证当前用户并获取工号
+     *
+     * @return 工号，如果验证失败则返回错误响应
+     */
+    private Object validateAndGetCode() {
+        Integer currentStaffId = securityUtil.getCurrentOperatorId();
+        if (currentStaffId == null) {
+            return Response.error(BusinessStatusEnum.UNAUTHORIZED);
+        }
+        Staff currentStaff = this.staffMapper.selectById(currentStaffId);
+        if (currentStaff == null) {
+            return Response.error("用户信息不存在");
+        }
+        return currentStaff.getCode();
+    }
+
+    public ResponseDTO add(StaffLeave staffLeave) {
+        if (save(staffLeave)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+    public ResponseDTO delete(Integer id) {
+        if (removeById(id)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+
+    @Transactional
+    public ResponseDTO deleteBatch(List<Integer> ids) {
+        if (removeBatchByIds(ids)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+    /**
+     * @param staffLeave
+     * @return
+     */
+    public ResponseDTO edit(StaffLeave staffLeave) {
+        if (updateById(staffLeave)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+
+    public ResponseDTO query(Integer id) {
+        StaffLeave staffLeave = getById(id);
+        if (staffLeave != null) {
+            return Response.success(staffLeave);
+        }
+        return Response.error();
+    }
+
+
+    public ResponseDTO list(Integer current, Integer size, String name, Integer deptId, String code) {
+        IPage<StaffLeaveVO> config = new Page<>(current, size);
+        // 查询当前用户的组任务以及个人任务
+        List<Task> taskList = this.taskService.createTaskQuery().processDefinitionKey("leave").taskCandidateOrAssigned(code).list();
+        List<Integer> ids = new ArrayList<>();
+        for (Task task : taskList) {
+            if (task != null) {
+                ProcessInstance instance = this.runtimeService.createProcessInstanceQuery().processInstanceId(task.getProcessInstanceId()).singleResult();
+                ids.add(Integer.valueOf(instance.getBusinessKey()));
+            }
+        }
+        IPage<StaffLeaveVO> page = this.staffLeaveMapper.listStaffLeaveVO(config, name, deptId, ids);
+        List<StaffLeaveVO> staffLeaveVOList = page.getRecords();
+        List<HashMap<String, Object>> list = new ArrayList<>();
+        for (StaffLeaveVO staffLeaveVO : staffLeaveVOList) {
+            HashMap<String, Object> map = new HashMap<>();
+            map.put("staffLeave", staffLeaveVO);
+            map.put("tagType", staffLeaveVO.getStatus().getTagType());
+            map.put("approve", AuditStatusEnum.APPROVE);
+            map.put("reject", AuditStatusEnum.REJECT);
+            map.put("unaudited", AuditStatusEnum.UNAUDITED);
+            map.put("auditing", AuditStatusEnum.AUDITING);
+            list.add(map);
+        }
+        // 将响应数据填充到map中
+        Map map = new HashMap();
+        map.put("pages", page.getPages());
+        map.put("total", page.getTotal());
+        map.put("list", list);
+        return Response.success(map);
+    }
+
+    /**
+     * 数据导出
+     *
+     * @param response
+     * @return
+     */
+    public void export(HttpServletResponse response, String filename) throws IOException {
+        List<StaffLeave> list = list();
+        EasyExcelUtil.write(response, list, filename, StaffLeave.class);
+    }
+
+    /**
+     * 数据导入
+     *
+     * @param file
+     * @return
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ResponseDTO imp(MultipartFile file) throws IOException {
+        InputStream inputStream = file.getInputStream();
+        List<StaffLeave> list = EasyExcelUtil.read(inputStream, 1, StaffLeave.class);
+        // IService接口中的方法.批量插入数据
+        if (saveBatch(list)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+
+    public ResponseDTO queryByStaffId(Integer current, Integer size, Integer id) {
+        IPage<StaffLeave> config = new Page<>(current, size);
+        IPage<StaffLeave> page = this.staffLeaveMapper.listStaffLeaveByStaffId(config, id);
+        List<StaffLeave> records = page.getRecords();
+        List<HashMap<String, Object>> list = new ArrayList<>();
+        for (StaffLeave staffLeave : records) {
+            HashMap<String, Object> map = new HashMap<>();
+            map.put("staffLeave", staffLeave);
+            map.put("tagType", staffLeave.getStatus().getTagType());
+            map.put("unaudited", AuditStatusEnum.UNAUDITED);
+            map.put("approve", AuditStatusEnum.APPROVE);
+            map.put("reject", AuditStatusEnum.REJECT);
+            map.put("cancel", AuditStatusEnum.CANCEL);
+            list.add(map);
+        }
+        // 将响应数据填充到map中
+        Map map = new HashMap();
+        map.put("pages", page.getPages());
+        map.put("total", page.getTotal());
+        map.put("list", list);
+        return Response.success(map);
+    }
+
+    public ResponseDTO queryAll() {
+        List<Map<String, Object>> enumList = EnumUtil.getEnumList(AuditStatusEnum.class);
+        for (Map<String, Object> map : enumList) {
+            for (AuditStatusEnum auditStatusEnum : AuditStatusEnum.values()) {
+                if (map.get("code") == auditStatusEnum.getCode()) {
+                    map.put("tagType", auditStatusEnum.getTagType());
+                }
+            }
+        }
+        return Response.success(enumList);
+    }
+
+    /**
+     * 请假申请
+     *
+     * @param staffLeave 请假信息
+     * @return 操作结果
+     */
+    @Transactional
+    public ResponseDTO apply(StaffLeave staffLeave) {
+        // 验证当前用户并获取工号
+        Object codeResult = validateAndGetCode();
+        if (codeResult instanceof ResponseDTO) {
+            return (ResponseDTO) codeResult;
+        }
+        String code = (String) codeResult;
+        Integer currentStaffId = securityUtil.getCurrentOperatorId();
+
+        // 验证请假归属
+        if (!staffLeave.getStaffId().equals(currentStaffId)) {
+            log.warn("Unauthorized leave application: currentStaffId={}, targetStaffId={}",
+                     currentStaffId, staffLeave.getStaffId());
+            return Response.error(BusinessStatusEnum.FORBIDDEN);
+        }
+
+        // 检查是否有待审核的请假
+        List<StaffLeave> staffLeaveList = this.staffLeaveMapper.selectList(new QueryWrapper<StaffLeave>().eq("staff_id", staffLeave.getStaffId())
+                .and(i -> i
+                        .eq("status", AuditStatusEnum.UNAUDITED).or()
+                        .eq("status", AuditStatusEnum.REJECT).or()
+                        .eq("status", AuditStatusEnum.AUDITING))
+        );
+        if (!staffLeaveList.isEmpty()) {
+            return Response.error("你有待审核、被驳回、正在审核中的请假申请！");
+        }
+
+        // 保存请假记录
+        if (!save(staffLeave)) {
+            return Response.error("提交失败！");
+        }
+
+        try {
+            // 启动流程实例
+            Map<String, Object> map = new HashMap<>();
+            map.put("staff", code);
+            ProcessInstance instance = this.runtimeService.startProcessInstanceByKey("leave", String.valueOf(staffLeave.getId()), map);
+
+            log.info("Started leave process: instanceId={}, businessKey={}, staff={}",
+                     instance.getId(), staffLeave.getId(), code);
+
+            // 自动完成第一个任务(请假申请节点)
+            Task task = this.taskService.createTaskQuery().processDefinitionKey("leave")
+                    .processInstanceBusinessKey(String.valueOf(staffLeave.getId()))
+                    .taskAssignee(code).singleResult();
+            List<Staff> staffList = null;
+            if (task != null) {
+                staffList = this.staffMapper.queryByRole("hr");
+                if (staffList.isEmpty()) {
+                    log.warn("No HR staff found for approval");
+                    return Response.error("未找到人事审批人员，请联系管理员");
+                }
+
+                Map<String, Object> map1 = new HashMap<>();
+                map1.put("hr", staffList.stream().map(Staff::getCode).collect(Collectors.joining(",")));
+                taskService.complete(task.getId(), map1);
+
+                log.info("Completed leave apply task: taskId={}, hrCount={}", task.getId(), staffList.size());
+            }
+
+            // 推送通知（不阻塞主流程）
+            if (staffList != null) {
+                leaveNotifier.onLeaveSubmitted(staffLeave, staffList.stream().map(Staff::getId).collect(Collectors.toList()));
+            }
+
+            return Response.success();
+        } catch (Exception e) {
+            log.error("Failed to start leave process: staffLeaveId={}", staffLeave.getId(), e);
+            // 回滚请假记录
+            removeById(staffLeave.getId());
+            return Response.error("流程启动失败，请稍后再试");
+        }
+    }
+
+    /**
+     * 拾取请假申请任务
+     *
+     * @param staffLeave 请假信息
+     * @return 操作结果
+     */
+    @Transactional
+    public ResponseDTO claim(StaffLeave staffLeave) {
+        String code = getCurrentStaffCode();
+        if (code == null) {
+            return Response.error(BusinessStatusEnum.UNAUTHORIZED);
+        }
+
+        staffLeave.setStatus(AuditStatusEnum.AUDITING);
+        if (!updateById(staffLeave)) {
+            return Response.error();
+        }
+
+        Task task = this.taskService.createTaskQuery().processDefinitionKey("leave")
+                .processInstanceBusinessKey(staffLeave.getId().toString())
+                .taskCandidateUser(code).singleResult();
+        if (task == null) {
+            return Response.error("任务不存在或无权拾取");
+        }
+
+        this.taskService.claim(task.getId(), code);
+        log.info("Claimed leave task: taskId={}, staff={}", task.getId(), code);
+
+        return Response.success();
+    }
+
+
+    /**
+     * 归还请假任务
+     *
+     * @param staffLeave 请假信息
+     * @return 操作结果
+     */
+    @Transactional
+    public ResponseDTO revert(StaffLeave staffLeave) {
+        String code = getCurrentStaffCode();
+        if (code == null) {
+            return Response.error(BusinessStatusEnum.UNAUTHORIZED);
+        }
+
+        staffLeave.setStatus(AuditStatusEnum.UNAUDITED);
+        if (!updateById(staffLeave)) {
+            return Response.error();
+        }
+
+        Task task = this.taskService.createTaskQuery().processDefinitionKey("leave")
+                .processInstanceBusinessKey(staffLeave.getId().toString())
+                .taskAssignee(code).singleResult();
+        if (task == null) {
+            return Response.error("任务不存在或未分配给你");
+        }
+
+        this.taskService.setAssignee(task.getId(), null);
+        log.info("Reverted leave task: taskId={}, staff={}", task.getId(), code);
+
+        return Response.success();
+    }
+
+
+    /**
+     * 完成审批任务
+     *
+     * @param staffLeave 请假信息
+     * @return 操作结果
+     */
+    @Transactional
+    public ResponseDTO complete(StaffLeave staffLeave) {
+        String code = getCurrentStaffCode();
+        if (code == null) {
+            return Response.error(BusinessStatusEnum.UNAUTHORIZED);
+        }
+
+        if (!updateById(staffLeave)) {
+            return Response.error();
+        }
+
+        Task task = this.taskService.createTaskQuery().processDefinitionKey("leave")
+                .processInstanceBusinessKey(staffLeave.getId().toString())
+                .taskAssignee(code).singleResult();
+
+        if (task == null) {
+            log.warn("Leave audit task not found: leaveId={}, assignee={}", staffLeave.getId(), code);
+            return Response.error("任务不存在或未分配给你（可能已被归还或他人已处理）");
+        }
+
+        Map<String, Object> map = new HashMap<>();
+        if (Objects.equals(task.getTaskDefinitionKey(), "hr_audit")) {
+            map.put("hrAuditStatus", staffLeave.getStatus().getCode());
+        } else if(Objects.equals(task.getTaskDefinitionKey(), "manager_audit")) {
+            map.put("managerAuditStatus", staffLeave.getStatus().getCode());
+        }
+
+        taskService.complete(task.getId(), map);
+        log.info("Completed leave audit task: taskId={}, staff={}, status={}",
+                 task.getId(), code, staffLeave.getStatus());
+
+        // 推送通知给申请人
+        leaveNotifier.onLeaveCompleted(staffLeave);
+
+        return Response.success();
+    }
+
+    /**
+     * 撤销请假申请
+     *
+     * @param staffLeave
+     * @return
+     */
+    @Transactional
+    public ResponseDTO cancel(StaffLeave staffLeave) {
+        staffLeave.setStatus(AuditStatusEnum.CANCEL);
+        if (!updateById(staffLeave)) {
+            return Response.error();
+        }
+        ProcessInstance instance = this.runtimeService.createProcessInstanceQuery()
+                .processDefinitionKey("leave")
+                .processInstanceBusinessKey(staffLeave.getId().toString()).singleResult();
+        if (instance != null) {
+            runtimeService.deleteProcessInstance(instance.getProcessInstanceId(), staffLeave.getStatus().getMessage());
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+}
+
+
+
+

@@ -1,0 +1,30 @@
+{
+  "checks": [
+    "backend health",
+    "anonymous access denied",
+    "admin captcha JPEG",
+    "product branding and demo mode",
+    "refresh cookie proxy path",
+    "refresh token round trip",
+    "home data",
+    "staff list",
+    "salary list",
+    "document parsing and vector indexing",
+    "SSE completion and document citation",
+    "retrieved source text appears in answer",
+    "conversation persisted",
+    "question and answer persisted",
+    "staff_3 captcha JPEG",
+    "leave application starts Flowable",
+    "staff_9 captcha JPEG",
+    "HR approval",
+    "staff_2 captcha JPEG",
+    "manager approval",
+    "leave approved state persisted",
+    "approved leave updates attendance"
+  ],
+  "passed": 22,
+  "documentId": 97,
+  "leaveId": 77,
+  "externalModelTested": false
+}

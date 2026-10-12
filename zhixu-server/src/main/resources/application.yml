@@ -1,0 +1,170 @@
+# 主配置（唯一配置文件）
+# 本地默认值直接写字面值；仅敏感项（LLM_API_KEY / JWT_SECRET / LLM_BASE_URL / LLM_CHAT_MODEL / LLM_EMBEDDING_MODEL）
+# 通过 zhixu-server/.env 注入（spring-boot:run 的 cwd 即 zhixu-server/）
+
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    master:
+      jdbc-url: jdbc:mysql://localhost:3306/hrm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+      username: root
+      password: 123456
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      type: com.zaxxer.hikari.HikariDataSource
+    flowable:
+      jdbc-url: jdbc:mysql://localhost:3306/hrm_flowable?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+      username: root
+      password: 123456
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      type: com.zaxxer.hikari.HikariDataSource
+    kb:
+      jdbc-url: jdbc:postgresql://localhost:5432/hrm_kb
+      username: hrm
+      password: 123456
+      driver-class-name: org.postgresql.Driver
+      type: com.zaxxer.hikari.HikariDataSource
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 20MB
+      max-request-size: 30MB
+
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    password:
+    database: 0
+    lettuce:
+      pool:
+        max-idle: 16
+        max-active: 32
+        min-idle: 8
+
+  main:
+    allow-bean-definition-overriding: true
+
+  ai:
+    openai:
+      api-key: ${LLM_API_KEY:}
+      base-url: ${LLM_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+      chat:
+        options:
+          model: ${LLM_CHAT_MODEL:qwen3.7-flash}
+
+server:
+  port: 8888
+
+flowable:
+  database-schema-update: true
+  dmn:
+    enabled: false
+  form:
+    enabled: false
+  app:
+    enabled: false
+  content:
+    enabled: false
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+  type-enums-package: com.zhixu.*.enums
+  mapper-locations: classpath:mapper/*.xml
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+jwt:
+  secret: ${JWT_SECRET}
+
+staff:
+  default-password: 123
+
+chat:
+  enabled: true
+  timeout-seconds: 15
+  knowledge:
+    rebuild-on-start: false
+  provider:
+    base-url: ${LLM_BASE_URL:}
+    api-key: ${LLM_API_KEY:}
+    model: ${LLM_CHAT_MODEL:}
+
+# MinIO 对象存储
+storage:
+  minio:
+    endpoint: http://127.0.0.1:9000
+    access-key: minioadmin
+    secret-key: minioadmin
+    bucket: hrm
+
+# 知识库模块配置
+knowledge:
+  enabled: true
+  chunk:
+    max-size: 1000
+    overlap: 100
+  embedding:
+    api-key: ${LLM_API_KEY:}
+    base-url: ${LLM_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+    model: ${LLM_EMBEDDING_MODEL:qwen3.7-text-embedding}
+  retrieval:
+    top-k: 10
+    vector-top-k: 20
+    keyword-top-k: 20
+    rrf-k: 60
+    window-size: 1
+  qa:
+    evidence-none-threshold: 0.0
+    evidence-weak-threshold: 0.3
+    evidence-partial-threshold: 0.5
+    evidence-sufficient-threshold: 0.7
+
+holidays:
+  - 2024-01-01
+  - 2024-02-10
+  - 2024-02-11
+  - 2024-02-12
+  - 2024-02-13
+  - 2024-02-14
+  - 2024-02-15
+  - 2024-02-16
+  - 2024-02-17
+  - 2024-04-04
+  - 2024-04-05
+  - 2024-04-06
+  - 2024-05-01
+  - 2024-05-02
+  - 2024-05-03
+  - 2024-05-04
+  - 2024-05-05
+  - 2024-06-08
+  - 2024-06-09
+  - 2024-06-10
+  - 2024-09-15
+  - 2024-09-16
+  - 2024-09-17
+  - 2024-10-01
+  - 2024-10-02
+  - 2024-10-03
+  - 2024-10-04
+  - 2024-10-05
+  - 2024-10-06
+  - 2024-10-07
+
+# 本地开发调试日志级别
+logging:
+  level:
+    com.zhixu: debug
+    org.springframework.ai.openai: TRACE
+    org.springframework.web.client.RestClient: DEBUG

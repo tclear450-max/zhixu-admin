@@ -1,0 +1,128 @@
+name: zhixu-delivery
+services:
+  mysql:
+    image: mysql:8.1.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:?Run start.ps1 to generate local config}
+      TZ: Asia/Shanghai
+    ports: ["127.0.0.1:13306:3306"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./delivery/00-databases.sql:/docker-entrypoint-initdb.d/00-databases.sql:ro
+      - ./db/mysql/hrm.sql:/seed/hrm.sql:ro
+      - ./delivery/demo.sql:/seed/demo.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysql -uroot hrm -e 'SELECT version FROM zhixu_delivery_meta WHERE id=1' >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 50
+    restart: unless-stopped
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    ports: ["127.0.0.1:16379:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: hrm
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?Run start.ps1}
+      POSTGRES_DB: hrm_kb
+      TZ: Asia/Shanghai
+    ports: ["127.0.0.1:15432:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./db/postgresql/knowledge_base.sql:/docker-entrypoint-initdb.d/01-knowledge.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hrm -d hrm_kb"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+  minio:
+    image: hrm-minio-source:2025-04-22
+    build:
+      context: ./delivery
+      dockerfile: minio.Dockerfile
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:?Run start.ps1}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:?Run start.ps1}
+    ports: ["127.0.0.1:19000:9000", "127.0.0.1:19001:9001"]
+    volumes: ["minio-data:/data"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/minio/health/live')"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+  demo-model:
+    image: python:3.13-alpine
+    command: python /app/demo_model.py
+    volumes: ["./delivery/demo_model.py:/app/demo_model.py:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+  backend:
+    image: eclipse-temurin:17-jre-jammy
+    working_dir: /app
+    command: java -Xms128m -Xmx768m -Djava.awt.headless=true -jar app.jar --spring.profiles.active=delivery --spring.config.additional-location=file:/app/application-delivery.yml
+    environment:
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      PG_PASSWORD: ${PG_PASSWORD}
+      MINIO_USER: ${MINIO_USER}
+      MINIO_PASSWORD: ${MINIO_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Run start.ps1}
+      LLM_API_KEY: ${LLM_API_KEY:-local-demo}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://demo-model:8090/compatible-mode}
+      LLM_CHAT_MODEL: ${LLM_CHAT_MODEL:-hrm-demo-extractive}
+      LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-hrm-demo-hash-1024}
+      TZ: Asia/Shanghai
+    ports: ["127.0.0.1:18888:8888"]
+    volumes:
+      - ./zhixu-server/target/zhixu-server-1.0.0.jar:/app/app.jar:ro
+      - ./delivery/application-delivery.yml:/app/application-delivery.yml:ro
+      - uploads:/app/hrm-files
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+      minio: {condition: service_healthy}
+      demo-model: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8888; printf 'GET /actuator/health HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3; cat <&3 | grep -q '\"status\":\"UP\"'"]
+      start_period: 90s
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+  frontend:
+    image: nginx:1.28-alpine
+    ports: ["127.0.0.1:18080:80"]
+    volumes:
+      - ./zhixu-admin/dist:/usr/share/nginx/html:ro
+      - ./delivery/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./delivery/guide.html:/opt/zhixu/guide.html:ro
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/login"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  mysql-data:
+  redis-data:
+  postgres-data:
+  minio-data:
+  uploads:

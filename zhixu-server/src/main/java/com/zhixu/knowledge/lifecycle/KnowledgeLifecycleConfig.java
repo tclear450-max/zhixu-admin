@@ -1,0 +1,67 @@
+package com.zhixu.knowledge.lifecycle;
+
+import com.zhixu.knowledge.lifecycle.port.ChunkVectorStore;
+import com.zhixu.knowledge.lifecycle.port.EmbeddingProvider;
+import com.zhixu.knowledge.lifecycle.port.ObjectStore;
+import com.zhixu.knowledge.mapper.IngestionJobMapper;
+import com.zhixu.knowledge.mapper.DocsMapper;
+import com.zhixu.knowledge.service.ChunkService;
+import com.zhixu.knowledge.service.DocumentParserService;
+import com.zhixu.knowledge.service.TextCleanupService;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.concurrent.Executor;
+
+/**
+ * 文档生命周期模块装配：门面 + 管道 + 清理 + 启动恢复。
+ * 三个端口（ChunkVectorStore/ObjectStore/EmbeddingProvider）的生产适配器由组件扫描注册。
+ */
+@Configuration
+public class KnowledgeLifecycleConfig {
+
+    @Bean
+    public IngestionPipeline ingestionPipeline(DocsMapper documentMapper,
+                                               IngestionJobMapper jobMapper,
+                                               ChunkVectorStore chunkVectorStore,
+                                               ObjectStore objectStore,
+                                               EmbeddingProvider embeddingProvider,
+                                               DocumentParserService parserService,
+                                               TextCleanupService textCleanupService,
+                                               ChunkService chunkService) {
+        return new IngestionPipeline(documentMapper, jobMapper, chunkVectorStore, objectStore,
+                embeddingProvider, parserService, textCleanupService, chunkService);
+    }
+
+    @Bean
+    public DocumentPurgeHandler documentPurgeHandler(DocsMapper documentMapper,
+                                                     ChunkVectorStore chunkVectorStore,
+                                                     ObjectStore objectStore) {
+        return new DocumentPurgeHandler(documentMapper, chunkVectorStore, objectStore);
+    }
+
+    @Bean
+    public DocumentLifecycleService documentLifecycleService(DocsMapper documentMapper,
+                                                             IngestionJobMapper jobMapper,
+                                                             TransactionTemplate transactionTemplate,
+                                                             @Qualifier("fileTaskExecutor") Executor ingestExecutor,
+                                                             IngestionPipeline pipeline,
+                                                             DocumentPurgeHandler purgeHandler) {
+        return new DocumentLifecycleService(documentMapper, jobMapper, transactionTemplate,
+                ingestExecutor, pipeline, purgeHandler);
+    }
+
+    /** 启动恢复：仅在知识库启用时注册（四步恢复覆盖三个崩溃窗口）。 */
+    @Bean
+    @ConditionalOnExpression("${knowledge.enabled:false}")
+    public StartupRecovery startupRecovery(DocsMapper documentMapper,
+                                           IngestionJobMapper jobMapper,
+                                           IngestionPipeline pipeline,
+                                           DocumentPurgeHandler purgeHandler,
+                                           @Qualifier("fileTaskExecutor") Executor executor) {
+        return new StartupRecovery(documentMapper, jobMapper, pipeline, purgeHandler, executor);
+    }
+}

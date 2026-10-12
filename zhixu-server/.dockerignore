@@ -1,0 +1,12 @@
+target
+!target/*.jar
+.git
+.github
+.env
+.env.*
+src/test
+src/main/resources/application-dev.yml
+src/main/resources/application-prod.yml
+*.log
+*.key
+*.pem

@@ -1,0 +1,357 @@
+package com.zhixu.salary.service;
+import com.zhixu.filetask.service.FileTaskCoordinator;
+import com.zhixu.filetask.service.FileUploadService;
+import com.zhixu.filetask.spi.ExportProcessor;
+import com.zhixu.filetask.spi.ImportProcessor;
+
+import cn.hutool.core.date.DateTime;
+import cn.hutool.core.date.DateUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.zhixu.salary.entity.Salary;
+import com.zhixu.salary.entity.SalaryDeduct;
+import com.zhixu.filetask.entity.FileTaskError;
+import com.zhixu.attendance.enums.AttendanceStatusEnum;
+import com.zhixu.salary.enums.DeductEnum;
+import com.zhixu.filetask.enums.TaskModuleEnum;
+import com.zhixu.filetask.spi.AsyncFileTasks;
+import com.zhixu.attendance.mapper.AttendanceMapper;
+import com.zhixu.salary.mapper.SalaryMapper;
+import com.zhixu.common.dto.Response;
+import com.zhixu.common.dto.ResponseDTO;
+import com.zhixu.salary.calculation.SalaryCalculation;
+import com.zhixu.util.EasyExcelUtil;
+import com.zhixu.staff.service.SecurityUtil;
+import com.zhixu.salary.vo.StaffSalaryVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.InputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.sql.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * <p>
+ * 服务类
+ * </p>
+ *
+ * @author qiujie
+ * @since 2022-04-06
+ */
+@Service
+public class SalaryService extends ServiceImpl<SalaryMapper, Salary> {
+
+
+    @Autowired
+    private SalaryMapper salaryMapper;
+
+    @Autowired
+    private SalaryDeductService salaryDeductService;
+
+
+    @Autowired
+    private AttendanceMapper attendanceMapper;
+
+
+    @Autowired
+    private FileTaskCoordinator fileTaskCoordinator;
+
+    @Autowired
+    private AsyncFileTasks asyncFileTasks;
+
+    @Autowired
+    private FileUploadService fileUploadService;
+
+    @Autowired
+    private SecurityUtil securityUtil;
+
+    public ResponseDTO add(Salary salary) {
+        if (save(salary)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+    public ResponseDTO delete(Integer id) {
+        if (removeById(id)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+    public ResponseDTO deleteBatch(List<Integer> ids) {
+        if (removeBatchByIds(ids)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+
+    public ResponseDTO edit(Salary salary) {
+        if (updateById(salary)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+
+    public ResponseDTO query(Integer id) {
+        Salary salary = getById(id);
+        if (salary != null) {
+            return Response.success(salary);
+        }
+        return Response.error();
+    }
+
+
+    public ResponseDTO list(Integer current, Integer size, String name, Integer deptId, String month) {
+        IPage<StaffSalaryVO> config = new Page<>(current, size);
+        // 解决当搜索条件为空时，默认查询所有数据
+        if (name == null) {
+            name = "";
+        }
+        IPage<StaffSalaryVO> page;
+        if (deptId == null) {
+            page = this.salaryMapper.listStaffSalaryVO(config, name);
+        } else {
+            page = this.salaryMapper.listStaffDeptSalaryVO(config, name, deptId);
+        }
+        // 如果没有指明月份，就默认显示当前月份
+        if (month == null) {
+            Date datetime = new Date(System.currentTimeMillis());
+            month = DateUtil.format(datetime, "yyyyMM");
+        }
+        List<StaffSalaryVO> staffSalaryVOList = page.getRecords();
+        setSalaryInfo(month, staffSalaryVOList);
+        // 将响应数据填充到map中
+        Map map = new HashMap();
+        map.put("pages", page.getPages());
+        map.put("total", page.getTotal());
+        map.put("list", staffSalaryVOList);
+        map.put("month", month);
+        return Response.success(map);
+    }
+
+    /**
+     * 数据导出
+     *
+     * @param response
+     * @return
+     */
+    public void export(HttpServletResponse response, String month,String filename) throws IOException {
+        List<StaffSalaryVO> list = this.salaryMapper.queryStaffSalaryVO();
+        setSalaryInfo(month, list);
+        EasyExcelUtil.write(response, list, filename, StaffSalaryVO.class);
+    }
+
+    /**
+     * 设置工资的详细信息
+     *
+     * @param month
+     * @param list
+     */
+    private void setSalaryInfo(String month, List<StaffSalaryVO> list) {
+        DateTime dt = DateUtil.parse(month, "yyyyMM");
+        Date startDate = dt.toSqlDate();
+        Date endDate = DateUtil.offsetMonth(dt, 1).toSqlDate();
+        for (StaffSalaryVO staffSalaryVO : list) {
+            // 考勤次数（迟到/早退/旷工）
+            Map<Integer, Integer> attendanceCounts = new HashMap<>();
+            attendanceCounts.put(AttendanceStatusEnum.LATE.getCode(),
+                    this.attendanceMapper.countTimes(staffSalaryVO.getStaffId(),
+                            AttendanceStatusEnum.LATE.getCode(), startDate, endDate));
+            attendanceCounts.put(AttendanceStatusEnum.LEAVE_EARLY.getCode(),
+                    this.attendanceMapper.countTimes(staffSalaryVO.getStaffId(),
+                            AttendanceStatusEnum.LEAVE_EARLY.getCode(), startDate, endDate));
+            attendanceCounts.put(AttendanceStatusEnum.ABSENTEEISM.getCode(),
+                    this.attendanceMapper.countTimes(staffSalaryVO.getStaffId(),
+                            AttendanceStatusEnum.ABSENTEEISM.getCode(), startDate, endDate));
+            // 休假扣款仅计工作日（跳过周末）
+            int leaveWorkdayCount = 0;
+            List<Date> leaveDateList = this.attendanceMapper.queryLeaveDate(staffSalaryVO.getStaffId(),
+                    AttendanceStatusEnum.LEAVE.getCode(), startDate, endDate);
+            for (Date date : leaveDateList) {
+                if (!DateUtil.isWeekend(date)) {
+                    leaveWorkdayCount++;
+                }
+            }
+            // 扣款配置（部门维度）
+            Map<Integer, Integer> deductRates = new HashMap<>();
+            for (DeductEnum type : DeductEnum.values()) {
+                deductRates.put(type.getCode(), queryDeductRate(staffSalaryVO.getDeptId(), type));
+            }
+            // 当月薪资记录 + 加班费汇总
+            Salary monthSalary = getOne(new QueryWrapper<Salary>()
+                    .eq("staff_id", staffSalaryVO.getStaffId()).eq("month", month));
+            BigDecimal monthOvertime = this.salaryMapper.sumMonthOvertimeSalary(
+                    staffSalaryVO.getStaffId(), month);
+            // 纯计算委托
+            SalaryCalculation.compute(staffSalaryVO, attendanceCounts, leaveWorkdayCount,
+                    monthOvertime, monthSalary, deductRates);
+        }
+    }
+
+    /** 扣款配置：按部门 + 类型查询，缺失回退默认值。 */
+    private Integer queryDeductRate(Integer deptId, DeductEnum type) {
+        if (deptId == null) {
+            return type.getDefaultValue();
+        }
+        SalaryDeduct salaryDeduct = this.salaryDeductService.getOne(new QueryWrapper<SalaryDeduct>()
+                .eq("dept_id", deptId).eq("type_num", type));
+        return salaryDeduct != null ? salaryDeduct.getDeduct() : type.getDefaultValue();
+    }
+
+    /**
+     * 数据导入
+     *
+     * @param file
+     * @return
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ResponseDTO imp(MultipartFile file) throws IOException {
+        InputStream inputStream = file.getInputStream();
+        List<Salary> list = EasyExcelUtil.read(inputStream, 1, Salary.class);
+        // IService接口中的方法.批量插入数据
+        if (saveBatch(list)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+
+    public ResponseDTO setSalary(Salary salary) {
+        QueryWrapper<Salary> query = new QueryWrapper<>();
+        // 设置日薪、时薪
+        salary.setDaySalary(salary.getBaseSalary().divide(new BigDecimal("21.75"),3, RoundingMode.HALF_UP));
+        salary.setHourSalary(salary.getBaseSalary().divide(new BigDecimal(174),3, RoundingMode.HALF_UP));
+        query.eq("month", salary.getMonth()).eq("staff_id", salary.getStaffId());
+        if (update(salary, query) || save(salary)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+
+    /**
+     * 通过三阶段上传完成后创建异步导入任务。
+     */
+    public ResponseDTO createImportTask(String uploadId) {
+        String mergedKey = fileUploadService.completeUpload(uploadId);
+        AsyncFileTasks.ImportRequest<Salary> request = new AsyncFileTasks.ImportRequest<>(
+                TaskModuleEnum.SALARY, "salary_import.xlsx", mergedKey, null,
+                getCurrentOperatorId(), new SalaryImportHandler(this));
+        com.zhixu.filetask.spi.TaskSnapshot submission = asyncFileTasks.submitImport(request);
+        Map<String, Object> result = new HashMap<>();
+        result.put("taskId", submission.taskId());
+        return Response.success(result);
+    }
+
+    /**
+     * 创建异步导出任务（支持大文件）
+     */
+    public ResponseDTO createExportTask(String month, String filename) {
+        AsyncFileTasks.ExportRequest<StaffSalaryVO> request = new AsyncFileTasks.ExportRequest<>(
+                TaskModuleEnum.SALARY, filename, month, getCurrentOperatorId(),
+                new SalaryExportHandler(this));
+        com.zhixu.filetask.spi.TaskSnapshot submission = asyncFileTasks.submitExport(request);
+        Map<String, Object> result = new HashMap<>();
+        result.put("taskId", submission.taskId());
+        return Response.success(result);
+    }
+
+    private static final class SalaryImportHandler implements ImportProcessor<Salary> {
+
+        private final SalaryService service;
+
+        private SalaryImportHandler(SalaryService service) {
+            this.service = service;
+        }
+
+        @Override
+        public Class<Salary> getRowClass() {
+            return Salary.class;
+        }
+
+        @Override
+        public com.zhixu.filetask.enums.TaskModuleEnum getModule() {
+            return com.zhixu.filetask.enums.TaskModuleEnum.SALARY;
+        }
+
+        @Override
+        public void processBatch(List<Salary> rows, Long taskId,
+                                 java.util.function.Consumer<com.zhixu.filetask.entity.FileTaskError> errorCollector) {
+            try {
+                if (!rows.isEmpty() && !service.saveBatch(rows)) {
+                    for (Salary row : rows) {
+                        errorCollector.accept(new com.zhixu.filetask.entity.FileTaskError()
+                                .setTaskId(taskId)
+                                .setRawData(com.alibaba.fastjson.JSON.toJSONString(row))
+                                .setErrorMessage("薪资数据保存失败"));
+                    }
+                }
+            } catch (Exception e) {
+                for (Salary row : rows) {
+                    errorCollector.accept(new com.zhixu.filetask.entity.FileTaskError()
+                            .setTaskId(taskId)
+                            .setRawData(com.alibaba.fastjson.JSON.toJSONString(row))
+                            .setErrorMessage(e.getMessage()));
+                }
+            }
+        }
+    }
+
+    private static final class SalaryExportHandler implements ExportProcessor<StaffSalaryVO> {
+
+        private final SalaryService service;
+
+        private SalaryExportHandler(SalaryService service) {
+            this.service = service;
+        }
+
+        @Override
+        public Class<StaffSalaryVO> getRowClass() {
+            return StaffSalaryVO.class;
+        }
+
+        @Override
+        public com.zhixu.filetask.enums.TaskModuleEnum getModule() {
+            return com.zhixu.filetask.enums.TaskModuleEnum.SALARY;
+        }
+
+        @Override
+        public IPage<StaffSalaryVO> queryPage(int current, int pageSize, String queryParamsJson) {
+            String month = queryParamsJson;
+            List<StaffSalaryVO> all = service.salaryMapper.queryStaffSalaryVO();
+            service.setSalaryInfo(month, all);
+            IPage<StaffSalaryVO> page = new Page<>(current, pageSize);
+            int from = (current - 1) * pageSize;
+            int to = Math.min(from + pageSize, all.size());
+            page.setRecords(from >= all.size() ? java.util.Collections.emptyList() : all.subList(from, to));
+            page.setTotal(all.size());
+            return page;
+        }
+    }
+
+    private Integer getCurrentOperatorId() {
+        try {
+            return securityUtil != null ? securityUtil.getCurrentOperatorId() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+}
+
+
+
+

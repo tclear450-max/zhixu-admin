@@ -1,0 +1,119 @@
+.DS_Store
+
+# Build output and dependencies
+**/node_modules/
+**/dist/
+**/target/
+*.log
+hs_err_pid*.log
+replay_pid*.log
+
+# 测试相关代码一律不入库
+**/src/test/
+
+# Local and production environment files
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+# 环境 profile 配置入库（dev 无敏感值、prod 全占位符）；覆盖全局 gitignore 的忽略规则
+!**/application-dev.yml
+!**/application-prod.yml
+
+# Deployment configuration
+/deploy/
+**/docker-compose.yml
+!docker/local/docker-compose.yml
+**/Dockerfile
+
+# Certificates, keys, archives, and deployment bundles
+**/ssl/
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.tar
+*.tar.gz
+*.zip
+
+# Database exports and server-only material
+*.sql
+!zhixu-server/src/test/resources/sql/*.sql
+!zhixu-server/src/main/resources/db/migration/*.sql
+!db/mysql/
+!db/mysql/*.sql
+!db/postgresql/
+!db/postgresql/*.sql
+/sql/migration/
+/sql/run_migration.sh
+*.rdb
+
+# Local scripts and generated documentation
+/scripts/
+docs/*
+!docs/import/
+!docs/import/*.xlsx
+
+# Uploaded/runtime files
+file/
+*.xlsx
+
+# IDE and agent files
+.idea/
+.vscode/
+.claude/
+.codex/
+.playwright-mcp/
+.tmp_*.txt
+*.iml
+*.iws
+*.ipr
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS and tool metadata
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache
+.apt_generated
+/nbproject/private/
+/nbbuild/
+/nbdist/
+/.nb-gradle/
+
+# 临时截图和文档
+/*.png
+/*.jpg
+
+# 临时文件和重构备份
+tmp/
+.worktrees/
+*.bak
+
+# 测试产物（测试脚本/测试数据/测试报告/测试日志，一律不入库）
+docs/test-reports/
+
+# 本地开发运行时目录
+zhixu-server/hrm-files/
+
+deploy/
+
+docs/learn
+
+# Local delivery additions
+!delivery/*.Dockerfile
+!delivery/*.sql
+!zhixu-server/Dockerfile
+/delivery/vendor/
+/delivery/artifacts/
+/delivery/*.png
+**/__pycache__/
+!docs/screenshots/
+!docs/screenshots/*.png

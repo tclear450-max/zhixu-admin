@@ -1,0 +1,50 @@
+spring:
+  datasource:
+    master:
+      jdbc-url: jdbc:mysql://mysql:3306/hrm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      password: ${MYSQL_PASSWORD}
+    flowable:
+      jdbc-url: jdbc:mysql://mysql:3306/hrm_flowable?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      password: ${MYSQL_PASSWORD}
+    kb:
+      jdbc-url: jdbc:postgresql://postgres:5432/hrm_kb
+      password: ${PG_PASSWORD}
+  redis:
+    host: redis
+  data:
+    redis:
+      host: redis
+  ai:
+    openai:
+      api-key: ${LLM_API_KEY:local-demo}
+      base-url: ${LLM_BASE_URL:http://demo-model:8090/compatible-mode}
+      chat:
+        options:
+          model: ${LLM_CHAT_MODEL:hrm-demo-extractive}
+      embedding:
+        options:
+          model: ${LLM_EMBEDDING_MODEL:hrm-demo-hash-1024}
+          dimensions: 1024
+    vectorstore:
+      pgvector:
+        initialize-schema: false
+        dimensions: 1024
+  autoconfigure:
+    exclude: org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+storage:
+  minio:
+    endpoint: http://minio:9000
+    access-key: ${MINIO_USER}
+    secret-key: ${MINIO_PASSWORD}
+staff:
+  default-password: Zx@123456
+knowledge:
+  embedding:
+    api-key: ${LLM_API_KEY:local-demo}
+    base-url: ${LLM_BASE_URL:http://demo-model:8090/compatible-mode}
+    model: ${LLM_EMBEDDING_MODEL:hrm-demo-hash-1024}
+logging:
+  level:
+    com.zhixu: info
+    org.springframework.ai.openai: info
+    org.springframework.web.client.RestClient: info

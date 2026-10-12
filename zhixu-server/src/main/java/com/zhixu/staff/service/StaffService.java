@@ -1,0 +1,276 @@
+package com.zhixu.staff.service;
+import com.zhixu.dept.service.DeptService;
+
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.date.DateUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.zhixu.common.dto.Response;
+import com.zhixu.common.dto.ResponseDTO;
+import com.zhixu.dept.entity.Dept;
+import com.zhixu.staff.entity.Staff;
+import com.zhixu.staff.mapper.StaffMapper;
+import com.zhixu.util.EasyExcelUtil;
+import com.zhixu.staff.vo.StaffDeptVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
+
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+/**
+ * <p>
+ * 服务类
+ * </p>
+ *
+ * @author qiujie
+ * @since 2022-01-27
+ */
+
+@Service
+public class StaffService extends ServiceImpl<StaffMapper, Staff> {
+
+    @Value("${staff.default-password}")
+    private String defaultPassword;
+
+    @Autowired
+    private DeptService deptService;
+
+    @Autowired
+    private StaffMapper staffMapper;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+
+    /**
+     * 新增
+     *
+     * @param staff
+     * @return ResponseDTO
+     */
+    public ResponseDTO add(Staff staff) {
+        // 必填字段验证
+        if (!StringUtils.hasText(staff.getName())) {
+            return Response.error("员工姓名不能为空");
+        }
+        if (staff.getDeptId() == null) {
+            return Response.error("所属部门不能为空");
+        }
+
+        if (save(staff)) {
+            // 设置默认密码、工号
+            staff.setPassword(passwordEncoder.encode(defaultPassword)).setCode("staff_" + staff.getId());
+            updateById(staff);
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+    /**
+     * 逻辑删除
+     *
+     * @param id
+     * @return
+     */
+    public ResponseDTO delete(Integer id) {
+        if (removeById(id)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+    /**
+     * 编辑
+     *
+     * @param staff
+     * @return
+     */
+    public ResponseDTO edit(Staff staff) {
+        if (updateById(staff)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+    /**
+     * 查找
+     *
+     * @param id
+     * @return
+     */
+    public ResponseDTO query(Integer id) {
+        Staff staff = getById(id);
+        if (staff != null) {
+            return Response.success(staff);
+        }
+        return Response.error();
+    }
+
+
+    /**
+     * 多条件分页查询
+     * @param current
+     * @param size
+     * @param name
+     * @param birthday
+     * @param deptId
+     * @param status
+     * @return
+     */
+    public ResponseDTO list(Integer current, Integer size, String name, String birthday,Integer deptId,Integer status) {
+        // 分页构造
+        IPage<Staff> pageConfig = new Page<>(current, size);
+        QueryWrapper<Staff> wrapper = new QueryWrapper<>();
+        if (StringUtils.hasText(name)) {
+            wrapper.like("name", name);
+        }
+        if (birthday != null) {
+            wrapper.ge("birthday",birthday);
+        }
+        if (deptId != null) {
+            wrapper.eq("dept_id", deptId);
+        }
+        if (status != null) {
+            wrapper.eq("status", status);
+        }
+        IPage<Staff> page = page(pageConfig, wrapper);
+        List<Staff> records = page.getRecords();
+
+        // 批量查询部门信息，避免 N+1 查询
+        List<Integer> deptIds = records.stream()
+                .map(Staff::getDeptId)
+                .filter(id -> id != null)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Integer, Dept> deptMap = new HashMap<>();
+        if (!deptIds.isEmpty()) {
+            List<Dept> depts = this.deptService.listByIds(deptIds);
+            deptMap = depts.stream()
+                    .collect(Collectors.toMap(Dept::getId, dept -> dept));
+        }
+
+        // 组装结果
+        List<StaffDeptVO> staffDeptVOList = new ArrayList<>();
+        for (Staff record : records) {
+            StaffDeptVO staffDeptVO = new StaffDeptVO();
+            Dept dept = deptMap.get(record.getDeptId());
+            if (dept != null) {
+                staffDeptVO.setDeptName(dept.getName());
+            }
+            if (record.getBirthday() != null) {
+                staffDeptVO.setAge(DateUtil.ageOfNow(record.getBirthday()));
+            }
+            BeanUtil.copyProperties(record, staffDeptVO);
+            staffDeptVOList.add(staffDeptVO);
+        }
+        Map map = new HashMap();
+        map.put("pages", page.getPages());
+        map.put("total", page.getTotal());
+        map.put("list", staffDeptVOList);
+        return Response.success(map);
+    }
+
+    /**
+     * 批量删除
+     *
+     * @param ids
+     * @return
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ResponseDTO deleteBatch(List<Integer> ids) {
+        if (removeBatchByIds(ids)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+
+    /**
+     * 数据导出
+     *
+     * @param response
+     * @return
+     */
+    public void export(HttpServletResponse response, String filename) throws IOException {
+        List<StaffDeptVO> list = this.staffMapper.queryStaffDeptVO();
+        // 设置员工年龄
+        for (StaffDeptVO staffDeptVO : list) {
+            if (staffDeptVO.getBirthday() != null) {
+                staffDeptVO.setAge(DateUtil.ageOfNow(staffDeptVO.getBirthday()));
+            }
+        }
+        EasyExcelUtil.write(response, list, filename, StaffDeptVO.class);
+    }
+
+    /**
+     * 数据导入
+     *
+     * @param file
+     * @return
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ResponseDTO imp(MultipartFile file) throws IOException {
+        InputStream inputStream = file.getInputStream();
+        List<Staff> list = EasyExcelUtil.read(inputStream, 1, Staff.class);
+        for (Staff staff : list) {
+            if (!save(staff)) {
+                return Response.error();
+            }
+            // 设置默认密码和工号；部门ID从Excel读取，未提供时才用默认值
+            staff.setPassword(passwordEncoder.encode(defaultPassword)).setCode("staff_" + staff.getId());
+            if (staff.getDeptId() == null) {
+                staff.setDeptId(1); // 默认部门
+            }
+            if (!updateById(staff)) {
+                return Response.error();
+            }
+        }
+        return Response.success();
+    }
+
+    // 检查员工的密码
+    public ResponseDTO validate(String pwd, Integer id) {
+        Staff staff = getById(id);
+        if (passwordEncoder.matches(pwd, staff.getPassword())) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+    public ResponseDTO reset(Staff staff) {
+        // MD5加密
+        staff.setPassword(passwordEncoder.encode(staff.getPassword()));
+        if (updateById(staff)) {
+            return Response.success();
+        }
+        return Response.error();
+    }
+
+    /**
+     * 获取员工信息
+     *
+     * @param id
+     * @return
+     */
+    public ResponseDTO queryInfo(Integer id) {
+        StaffDeptVO staffInfo = this.staffMapper.queryInfo(id);
+        if (staffInfo != null) {
+            return Response.success(staffInfo);
+        }
+        return Response.error();
+    }
+}
