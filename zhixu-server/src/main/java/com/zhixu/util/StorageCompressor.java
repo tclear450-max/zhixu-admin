@@ -11,7 +11,6 @@ import java.util.Set;
 /**
  * zstd 无损压缩工具，用于文件存储层选择性压缩。
  *
- * @author qiujie
  */
 public final class StorageCompressor {
 

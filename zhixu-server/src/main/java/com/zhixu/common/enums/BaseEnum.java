@@ -5,7 +5,6 @@ import java.io.Serializable;
 /**
  * 通用枚举接口
  * 
- * @Author qiujie
  * @Date 2022/3/21
  * @Version 1.0
  */

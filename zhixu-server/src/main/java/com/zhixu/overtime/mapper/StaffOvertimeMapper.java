@@ -16,7 +16,6 @@ import java.util.List;
  * 员工加班表 Mapper 接口
  * </p>
  *
- * @author qiujie
  * @since 2024-03-20
  */
 public interface StaffOvertimeMapper extends BaseMapper<StaffOvertime> {

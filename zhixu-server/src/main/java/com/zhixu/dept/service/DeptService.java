@@ -33,7 +33,6 @@ import com.zhixu.security.ServiceException;
  * 服务类
  * </p>
  *
- * @author qiujie
  * @since 2022-03-07
  */
 @Service

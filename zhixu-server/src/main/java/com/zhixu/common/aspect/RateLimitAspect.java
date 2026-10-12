@@ -23,7 +23,6 @@ import java.util.concurrent.TimeUnit;
 /**
  * 速率限制切面
  *
- * @author qiujie
  * @date 2026-06-09
  */
 @Aspect

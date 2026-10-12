@@ -8,7 +8,6 @@ import com.zhixu.role.entity.RoleMenu;
  * Mapper 接口
  * </p>
  *
- * @author qiujie
  * @since 2022-02-28
  */
 public interface RoleMenuMapper extends BaseMapper<RoleMenu> {

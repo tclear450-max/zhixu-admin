@@ -23,7 +23,6 @@ import java.util.stream.Collectors;
 /**
  * 登录注册接口
  *
- * @Author : qiujie
  * @Date : 2022/1/30
  */
 @RestController

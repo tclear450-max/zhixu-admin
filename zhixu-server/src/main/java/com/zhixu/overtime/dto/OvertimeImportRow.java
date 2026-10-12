@@ -9,7 +9,6 @@ import java.sql.Timestamp;
 /**
  * 加班导入 Excel 行 DTO。
  *
- * @author qiujie
  */
 @Data
 public class OvertimeImportRow {

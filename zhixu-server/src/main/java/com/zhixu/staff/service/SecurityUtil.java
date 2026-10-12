@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 /**
  * 安全上下文工具类，提供当前登录用户信息的便捷访问
  *
- * @author qiujie
  */
 @Component
 public class SecurityUtil {

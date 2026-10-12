@@ -21,7 +21,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * 工资扣除表
  * </p>
  *
- * @author qiujie
  * @since 2022-03-27
  */
 @Getter

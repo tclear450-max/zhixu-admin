@@ -14,7 +14,6 @@ import java.util.List;
  * Mapper 接口
  * </p>
  *
- * @author qiujie
  * @since 2022-04-05
  */
 public interface StaffLeaveMapper extends BaseMapper<StaffLeave> {

@@ -22,7 +22,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * 仅在 ColumnMappingRegistry 未命中时调用，结果会缓存避免重复 LLM 调用。
  *
- * @author qiujie
  */
 @Component
 public class AiHeaderMatcherImpl implements FlexibleExcelImporter.AiHeaderMatcher {

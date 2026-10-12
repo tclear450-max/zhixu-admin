@@ -9,7 +9,6 @@ import java.lang.annotation.Target;
  * 速率限制注解
  * 用于控制接口访问频率
  *
- * @author qiujie
  * @date 2026-06-09
  */
 @Target(ElementType.METHOD)

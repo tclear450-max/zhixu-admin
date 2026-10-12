@@ -32,7 +32,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * 
  * </p>
  *
- * @author qiujie
  * @since 2022-02-28
  */
 @Getter

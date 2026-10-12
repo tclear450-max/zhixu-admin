@@ -4,7 +4,7 @@
 
 项目仓库：[tclear450-max/zhixu-admin](https://github.com/tclear450-max/zhixu-admin)。仓库包含完整前后端，前端位于 `zhixu-admin`，后端位于 `zhixu-server`。
 
-知序人事是基于 quuuuj/hrm 开发的独立品牌衍生项目，保留上游业务能力，增加自主视觉、产品信息接口、可复现的本地交付环境和无需密钥的制度检索演示。前后端工程已命名为 `zhixu-admin`、`zhixu-server`，Java 包为 `com.zhixu`。
+知序人事是一套面向企业的人事协作平台，覆盖员工档案、组织架构、考勤审批、薪资管理与制度问答，提供统一的工作空间和可复现的本地运行环境。
 
 业务 UI 已统一为知序视觉：深青导航、浅色工作区、青绿色操作、模块标题、工作总览与制度问答。桌面表格与编辑弹窗重新整理，手机使用抽屉导航及横向表格；新版界面截图见 `delivery/知序UI-*.png`。
 
@@ -51,17 +51,15 @@ cd zhixu-admin
 ```text
 zhixu-admin/         Vue 2 / Element UI，知序视觉与业务页面
 zhixu-server/        Java 17 / Spring Boot / Flowable / Spring AI
-db/                 上游数据库结构
+db/                 数据库结构与初始化脚本
 delivery/           交付配置、本地模型适配器、演示制度与验证工具
 compose.delivery.yaml  独立 Docker 编排
 start.bat / start.ps1   自动配置、构建和启动
 stop.bat               停止服务，保留数据
 使用说明.md            操作、开发、模型接入和排障
-THIRD_PARTY.md         上游来源与许可证
+THIRD_PARTY.md         组件与许可证说明
 ```
 
-数据库沿用 `hrm`、`hrm_flowable`、`hrm_kb` 标识作为内部兼容名称。原始说明保留在 `README.upstream.md`。
+## 许可证
 
-## 来源
-
-上游：[quuuuj/hrm](https://github.com/quuuuj/hrm)，基线提交 `c792149707036b74f75a5dd83f69cf6af8aa47d9`，GPL-3.0。知序的衍生修改继续采用 GPL-3.0，原始作者署名与 LICENSE 保留。详见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+本项目采用 GPL-3.0 许可证，详见 [LICENSE](LICENSE)。第三方组件说明见 [THIRD_PARTY.md](THIRD_PARTY.md)。

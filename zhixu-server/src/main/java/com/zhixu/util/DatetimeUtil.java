@@ -8,7 +8,6 @@ import org.springframework.stereotype.Component;
 import java.sql.Date;
 
 /**
- * @Author qiujie
  * @Date 2022/4/12
  * @Version 1.0
  */

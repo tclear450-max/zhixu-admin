@@ -8,7 +8,6 @@ import com.zhixu.overtime.entity.Overtime;
  * 加班表 Mapper 接口
  * </p>
  *
- * @author qiujie
  * @since 2022-03-28
  */
 

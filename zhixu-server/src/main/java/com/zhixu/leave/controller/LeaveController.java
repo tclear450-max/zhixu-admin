@@ -17,7 +17,6 @@ import java.util.List;
  * 请假表 前端控制器
  * </p>
  *
- * @author qiujie
  * @since 2022-03-27
  */
 @RestController

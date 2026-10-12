@@ -33,7 +33,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * 员工考勤表
  * </p>
  *
- * @author qiujie
  * @since 2024-03-20
  */
 @Getter

@@ -10,7 +10,6 @@ import java.util.*;
  * 替代各 DTO 上的 {@code @ExcelProperty} 注解，集中管理映射关系。
  * 新增模块只需在这里加一个 Map，无需修改 DTO 或 Entity。
  *
- * @author qiujie
  */
 public final class ColumnMappingRegistry {
 

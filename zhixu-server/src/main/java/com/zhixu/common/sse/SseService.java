@@ -13,7 +13,6 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 通用 SSE 服务，支持任务进度推送和业务通知推送。
  *
- * @author qiujie
  */
 @Service
 public class SseService {

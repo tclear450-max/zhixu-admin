@@ -12,7 +12,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 /**
  * 通知 SSE 订阅端点。
  *
- * @author qiujie
  */
 @RestController
 @RequestMapping("/notification")

@@ -21,7 +21,6 @@ import java.util.*;
  * 不依赖 {@code @ExcelProperty} 注解，列序无关，多余列自动跳过。
  * 映射来源：ColumnMappingRegistry（精确）→ AI 兜底（模糊）。
  *
- * @author qiujie
  */
 public final class FlexibleExcelImporter {
 

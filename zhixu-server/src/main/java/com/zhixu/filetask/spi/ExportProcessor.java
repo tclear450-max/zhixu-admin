@@ -10,7 +10,6 @@ import com.zhixu.filetask.enums.TaskModuleEnum;
  * FileTaskEngine 负责流式写入、进度更新和文件管理。
  *
  * @param <T> Excel 行对应的 DTO/VO 类型
- * @author qiujie
  */
 public interface ExportProcessor<T> {
 

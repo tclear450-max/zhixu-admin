@@ -6,7 +6,6 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * @Author qiujie
  * @Date 2022/3/29
  * @Version 1.0
  * @deprecated 请使用 EasyExcel 的 {@code @ExcelProperty} 注解替代

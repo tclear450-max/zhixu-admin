@@ -13,7 +13,6 @@ import java.util.function.Consumer;
  * FileTaskEngine 负责流式读取、缓冲管理、进度更新和错误文件生成。
  *
  * @param <T> Excel 行对应的 DTO 类型
- * @author qiujie
  */
 public interface ImportProcessor<T> {
 

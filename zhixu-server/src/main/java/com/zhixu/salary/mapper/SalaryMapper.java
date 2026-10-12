@@ -15,7 +15,6 @@ import java.util.List;
  * Mapper 接口
  * </p>
  *
- * @author qiujie
  * @since 2022-04-06
  */
 public interface SalaryMapper extends BaseMapper<Salary> {

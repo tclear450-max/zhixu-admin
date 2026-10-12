@@ -23,7 +23,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * 加班表
  * </p>
  *
- * @author qiujie
  * @since 2022-03-28
  */
 @Getter

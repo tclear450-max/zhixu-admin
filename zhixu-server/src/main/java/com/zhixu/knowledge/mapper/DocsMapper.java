@@ -15,7 +15,6 @@ import java.util.List;
  * Mapper 接口
  * </p>
  *
- * @author qiujie
  * @since 2022-02-24
  */
 public interface DocsMapper extends BaseMapper<Docs> {

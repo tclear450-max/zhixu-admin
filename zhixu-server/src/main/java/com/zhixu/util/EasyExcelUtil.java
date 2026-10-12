@@ -23,7 +23,6 @@ import java.util.stream.Collectors;
  * EasyExcel 同步读写工具类，替代 HutoolExcelUtil。
  * 内部使用 EasyExcel 的流式 SAX 解析，内存占用远低于 Hutool 的 DOM 模式。
  *
- * @author qiujie
  */
 public class EasyExcelUtil {
 

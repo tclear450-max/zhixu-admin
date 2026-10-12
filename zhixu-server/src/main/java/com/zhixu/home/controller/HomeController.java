@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.annotation.Resource;
 
 /**
- * @Author qiujie
  * @Date 2022/2/27
  * @Version 1.0
  */

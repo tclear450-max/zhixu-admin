@@ -18,7 +18,6 @@ import java.util.stream.Collectors;
  * MinIO S3 对象存储服务。
  * 唯一存储后端，所有文件操作均通过此服务。
  *
- * @author qiujie
  */
 @Service
 public class MinioStorageService {

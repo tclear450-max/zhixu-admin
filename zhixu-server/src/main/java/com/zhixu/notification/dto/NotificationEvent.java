@@ -6,7 +6,6 @@ import java.time.format.DateTimeFormatter;
 /**
  * 通知事件 DTO，通过 SSE 推送到前端。
  *
- * @author qiujie
  */
 public class NotificationEvent {
 

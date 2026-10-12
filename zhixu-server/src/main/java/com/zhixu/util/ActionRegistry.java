@@ -6,7 +6,6 @@ import java.util.stream.Collectors;
 /**
  * 操作注册表：定义助手可执行的操作及其所需权限。
  *
- * @author qiujie
  */
 public final class ActionRegistry {
 
